@@ -37,7 +37,7 @@ def get_data(session:MySession, url:str ) -> dict|None:
         
         logger.info(f"received data = {len(out)}")
 
-    except requests.exceptions.HTTPError as e:
+    except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError) as e:
         logger.error(f"http error {e.errno}:{e.strerror}")
         return None
     except requests.exceptions.RequestException as e:
