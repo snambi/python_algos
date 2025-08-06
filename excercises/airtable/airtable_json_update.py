@@ -1,6 +1,5 @@
 import requests
 import json
-import gzip
 import dotenv, os
 import aiohttp
 from aiohttp import ClientSession 
