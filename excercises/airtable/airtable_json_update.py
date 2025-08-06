@@ -4,6 +4,7 @@ import dotenv, os, hashlib
 import aiohttp
 from aiohttp import ClientSession 
 import asyncio
+from typing import Final
 
 # Ideally, I would keep them under separate classes that can be passed around.
 # for this exercise, having a global variable should be sufficient
@@ -76,9 +77,9 @@ async def  update_compressed_json(recordId:str, data:dict, max_retries=3) -> boo
         
 
 
-PERSONAL_KEYS = ["Full Name", "Email", "Location", "LinkedIn"]
-EXPERIENCE_KEYS = ["Company", "Title", "Start", "End", "Technologies"]
-SALARY_KEYS = ["Preferred Rate","Minimum_Rate", "Currency", "Availability"]
+PERSONAL_KEYS:Final = ["Full Name", "Email", "Location", "LinkedIn"]
+EXPERIENCE_KEYS:Final = ["Company", "Title", "Start", "End", "Technologies"]
+SALARY_KEYS:Final = ["Preferred Rate","Minimum_Rate", "Currency", "Availability"]
 
 def combine_data(personal_data:list, experience_data:list, salary_data:list ) -> dict:
     data = {}

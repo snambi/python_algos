@@ -1,4 +1,4 @@
-from typing import Tuple,Dict
+from typing import Tuple,Dict, Final
 import airtable_json_update
 import requests
 from datetime import datetime
@@ -24,23 +24,30 @@ def extract():
     response.raise_for_status()
     records = response.json().get("records", [])
     # Extract just the fields
-    data = [record["fields"] for record in records]
+    data = {}
+    for record in records:
+        recordId = record["id"]
+        fields = record["fields"]
+        data[recordId] = fields
+        
     # extract only Compressed JSON
     result:dict = {}
     
     for x in data:
-        if "Compressed_JSON" in x:
-            k = x["Application_ID"]
-            v = x["Compressed_JSON"]
-            result[k] = eval(v)
+        d = data[x]
+        if "Compressed_JSON" in d:
+            k = d["Application_ID"]
+            v = d["Compressed_JSON"]
+            j = {"Application_ID": k, "Compressed_JSON": v}
+            result[x] = j
             
     return result
 
 # Define constants
-TIER_1_COMPANIES = {"Google", "Meta", "OpenAI"}
-ALLOWED_LOCATIONS = {"US", "Canada", "UK", "Germany", "India"}
-MAX_RATE = 100
-MIN_AVAILABILITY = 20
+TIER_1_COMPANIES:Final = {"Google", "Meta", "OpenAI"}
+ALLOWED_LOCATIONS:Final = {"US", "Canada", "UK", "Germany", "India"}
+MAX_RATE:Final = 100
+MIN_AVAILABILITY:Final = 20
 
 def calculate_experience_years(experience_list):
     total_days = 0
@@ -57,10 +64,11 @@ def is_tier_1_company(experience_list):
     return any(job["Company"] in TIER_1_COMPANIES for job in experience_list)
 
 
-def is_valid_applicant(record):
+def is_valid_applicant(input):
     
     result:str = "Applicant has "
     
+    record = eval(input.get("Compressed_JSON"))
     # Experience
     experience = record.get("experience", [])
     years = calculate_experience_years(experience)
@@ -145,20 +153,24 @@ async def analyze_applicant(applicant_id: int, applicant_data: dict) -> tuple:
     
 async def analyze(data:dict) -> dict:
     for x in data.keys():
-       if "compressed" in data[x]:
-           y = data[x]
-           text = await analyze_applicant(x, y["compressed"])
+        rec = data[x]
+        if "compressed" in rec:
+            y = data[x]
+            text = await analyze_applicant(x, y["compressed"])
            
-           parsed = json.loads(text[1])
-           #print(f"llm output: {parsed}")
-           y["llm_analysis"] = parsed
+            parsed = json.loads(text[1])
+            # print(f"llm output: {parsed}")
+            y["llm_analysis"] = parsed
     
-    
+
     return data
+
+
 
 
 def update(analyzed:dict, rejected:dict):
     pass
+    # 
 
 
 async def main():
