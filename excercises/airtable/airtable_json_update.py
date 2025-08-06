@@ -68,14 +68,14 @@ def combine_data(personal_data:list, experience_data:list, salary_data:list ) ->
     
     for x in personal_data:
         if "Email" in x :
-            print(f"personal = {x}")
+            #print(f"personal = {x}")
             filtered = {k: x[k] for k in PERSONAL_KEYS if k in x}
             applicant = x["Applicants"][0]
             data[applicant] = { "personal": filtered } 
     
     for x in experience_data:
         if "Company" in x:
-            print(f"experience = {x}")
+            #print(f"experience = {x}")
             filtered = { k:x[k] for k in EXPERIENCE_KEYS if k in x } 
             applicant = x["Applicants"][0]
             if "experience" not in data[applicant]:
@@ -87,7 +87,7 @@ def combine_data(personal_data:list, experience_data:list, salary_data:list ) ->
     
     for x in salary_data:
         if "Preferred Rate" in x:
-            print(f"salary = {x}")
+            #print(f"salary = {x}")
             filtered = { k:x[k] for k in SALARY_KEYS if k in x}
             applicant = x["Applicants"][0]
             y = data[applicant]
@@ -96,14 +96,22 @@ def combine_data(personal_data:list, experience_data:list, salary_data:list ) ->
     return data
 
 async def main():
+    """_summary_
+    Following three things are done by the script,
+    1. Fetch the data from Salary, Personal and Experience tables
+    2. Organize the data as per Applicant ID
+    3. Created a compressed JSON and update the Applicants table 
+    """
+    
     # Fetch data
     personal_data = fetch_data_from_airtable("Personal_Details")
     experience_data = fetch_data_from_airtable("Work_Experience")
     salary_data = fetch_data_from_airtable("Salary_Prefs")
 
+    # Combine data
     combined_data = combine_data(personal_data,experience_data, salary_data)
-    compressed_json = json.dumps(combined_data, separators=(',', ':'))
     
+    # Update Applicants with Compressed_JSON
     for x in combined_data.keys():
         result = await update_compressed_json(x ,combined_data[x])
         if result == False:
@@ -111,7 +119,9 @@ async def main():
         else:
             print(f"update to {x} Succeeded")
     
-
-
+##
+## To run the script it equires a .env file with following two values
+## AIRTABLE_API_TOKEN , AIRTABLE_BASE_ID 
+##
 if __name__ == "__main__":
     asyncio.run(main())
