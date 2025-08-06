@@ -1,0 +1,117 @@
+import requests
+import json
+import gzip
+import dotenv, os
+import aiohttp
+from aiohttp import ClientSession 
+import asyncio
+
+dotenv.load_dotenv()
+
+AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
+AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+
+HEADERS = {
+    "Authorization": f"Bearer {AIRTABLE_API_TOKEN}",
+     "Content-Type": "application/json"
+}
+
+
+def fetch_data_from_airtable(table_name):
+    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table_name}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    records = response.json().get("records", [])
+    # Extract just the fields
+    return [record["fields"] for record in records]
+
+
+async def  update_compressed_json(recordId:str, data:dict, max_retries=3) -> bool:
+    
+    url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/Applicants/{recordId}"
+
+    compressed_json = json.dumps(data, separators=(',', ':'))
+    payload = {
+        "fields": {
+            "Compressed_JSON": compressed_json
+        }
+    }
+
+    async with aiohttp.ClientSession() as session:
+        for attempt in range( 1, max_retries+1 ):
+            try:
+                async with session.patch(url, headers=HEADERS, json=payload) as response:
+                    if response.status == 200:
+                        #print(f"record {recordId} updated successfully")
+                        return True
+                    else:
+                        body = await response.text()
+                        print(f"Attempt {attempt}: Failed ({response.status}) - {body}")
+            except Exception as e:
+                print(f"Attempt {attempt} failed with {e}")
+                
+            wait_time = 2 ** attempt
+            print(f"Retrying in {wait_time} seconds...")
+            await asyncio.sleep(wait_time)
+            
+        return False
+
+        
+
+
+PERSONAL_KEYS = ["Full Name", "Email", "Location", "LinkedIn"]
+EXPERIENCE_KEYS = ["Company", "Title", "Start", "End", "Technologies"]
+SALARY_KEYS = ["Preferred Rate","Minimum_Rate", "Currency", "Availability"]
+
+def combine_data(personal_data:list, experience_data:list, salary_data:list ) -> dict:
+    data = {}
+    
+    for x in personal_data:
+        if "Email" in x :
+            print(f"personal = {x}")
+            filtered = {k: x[k] for k in PERSONAL_KEYS if k in x}
+            applicant = x["Applicants"][0]
+            data[applicant] = { "personal": filtered } 
+    
+    for x in experience_data:
+        if "Company" in x:
+            print(f"experience = {x}")
+            filtered = { k:x[k] for k in EXPERIENCE_KEYS if k in x } 
+            applicant = x["Applicants"][0]
+            if "experience" not in data[applicant]:
+                y = data[applicant] 
+                y["experience"] = [filtered]
+            else:
+                y = data[applicant]["experience"]
+                y.append(filtered)
+    
+    for x in salary_data:
+        if "Preferred Rate" in x:
+            print(f"salary = {x}")
+            filtered = { k:x[k] for k in SALARY_KEYS if k in x}
+            applicant = x["Applicants"][0]
+            y = data[applicant]
+            y["salary"] = filtered
+    
+    return data
+
+async def main():
+    # Fetch data
+    personal_data = fetch_data_from_airtable("Personal_Details")
+    experience_data = fetch_data_from_airtable("Work_Experience")
+    salary_data = fetch_data_from_airtable("Salary_Prefs")
+
+    combined_data = combine_data(personal_data,experience_data, salary_data)
+    compressed_json = json.dumps(combined_data, separators=(',', ':'))
+    
+    for x in combined_data.keys():
+        result = await update_compressed_json(x ,combined_data[x])
+        if result == False:
+            print(f"update to {x} failed")
+        else:
+            print(f"update to {x} Succeeded")
+    
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
