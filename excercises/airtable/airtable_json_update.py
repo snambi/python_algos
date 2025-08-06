@@ -1,19 +1,33 @@
 import requests
 import json
-import dotenv, os
+import dotenv, os, hashlib
 import aiohttp
 from aiohttp import ClientSession 
 import asyncio
 
-dotenv.load_dotenv()
+# Ideally, I would keep them under separate classes that can be passed around.
+# for this exercise, having a global variable should be sufficient
+HEADERS = {}
+AIRTABLE_BASE_ID = ""
+AIRTABLE_API_TOKEN = ""
 
-AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
-AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+def init():
 
-HEADERS = {
-    "Authorization": f"Bearer {AIRTABLE_API_TOKEN}",
-     "Content-Type": "application/json"
-}
+    dotenv.load_dotenv()
+    
+    global AIRTABLE_API_TOKEN, AIRTABLE_BASE_ID
+    
+    AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
+    AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+    
+    if AIRTABLE_API_TOKEN is None or AIRTABLE_BASE_ID is None:
+        raise Exception(f"AIRTABLE_BASE_ID or AIRTABLE_API_TOKEN is not set. please make sure the .env file contains these values")
+
+    global HEADERS
+    HEADERS = {
+        "Authorization": f"Bearer {AIRTABLE_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
 
 
 def fetch_data_from_airtable(table_name):
@@ -30,9 +44,13 @@ async def  update_compressed_json(recordId:str, data:dict, max_retries=3) -> boo
     url = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/Applicants/{recordId}"
 
     compressed_json = json.dumps(data, separators=(',', ':'))
+    sha256_hash = hashlib.sha256(compressed_json.encode('utf-8')).hexdigest()
+    
     payload = {
         "fields": {
-            "Compressed_JSON": compressed_json
+            "Compressed_JSON": compressed_json,
+            "Shortlist_status": "Pending",
+            "SHA": sha256_hash
         }
     }
 
@@ -123,4 +141,5 @@ async def main():
 ## AIRTABLE_API_TOKEN , AIRTABLE_BASE_ID 
 ##
 if __name__ == "__main__":
+    init()
     asyncio.run(main())
