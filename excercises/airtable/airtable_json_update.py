@@ -51,7 +51,10 @@ async def  update_compressed_json(recordId:str, data:dict, max_retries=3) -> boo
         "fields": {
             "Compressed_JSON": compressed_json,
             "Shortlist_status": "Pending",
-            "SHA": sha256_hash
+            "SHA": sha256_hash,
+            "LLM_Summary": "",
+            "LLM_Score": 0,
+            "Follow_Ups": ""   
         }
     }
 

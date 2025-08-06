@@ -1,4 +1,7 @@
-from typing import Tuple,Dict, Final
+import hashlib
+from typing import Tuple,Dict, Final, Optional
+
+import aiohttp
 import airtable_json_update
 import requests
 from datetime import datetime
@@ -149,7 +152,8 @@ async def analyze_applicant(applicant_id: int, applicant_data: dict) -> tuple:
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return (applicant_id, response.text)
     except Exception as e:
-        return (applicant_id, f"❌ Error: {str(e)}")
+        return (applicant_id, f"Error: {str(e)}")
+    
     
 async def analyze(data:dict) -> dict:
     for x in data.keys():
@@ -166,11 +170,72 @@ async def analyze(data:dict) -> dict:
     return data
 
 
+async def update_applicant(status:str, 
+                           recordId:str,
+                     llm_summary:str|None=None, 
+                     llm_score:int=0, 
+                     followups:str|None=None, max_retries=3 ):
+    
+    url = f"https://api.airtable.com/v0/{airtable_json_update.AIRTABLE_BASE_ID}/Applicants/{recordId}"
+    
+    payload = {
+        "fields": {
+            "Shortlist_status": status,
+        }
+    }
+    
+    if llm_summary is not None:
+        payload["fields"]["LLM_Summary"] = llm_summary
 
+    if followups is not None:
+        payload["fields"]["Follow_Ups"] = followups
 
-def update(analyzed:dict, rejected:dict):
+    # Add score only if it's meaningful (optional)
+    if llm_score > 0:
+        payload["fields"]["LLM_Score"] = llm_score # type: ignore
+    
+    async with aiohttp.ClientSession() as session:
+        for attempt in range( 1, max_retries+1 ):
+            try:
+                async with session.patch(url, headers=airtable_json_update.HEADERS, json=payload) as response:
+                    if response.status == 200:
+                        #print(f"record {recordId} updated successfully")
+                        return True
+                    else:
+                        body = await response.text()
+                        print(f"Attempt {attempt}: Failed ({response.status}) - {body}")
+            except Exception as e:
+                print(f"Attempt {attempt} failed with {e}")
+                
+            wait_time = 2 ** attempt
+            print(f"Retrying in {wait_time} seconds...")
+            await asyncio.sleep(wait_time)
+            
+        return False
+
+async def update_leads():
     pass
-    # 
+    
+
+async def update(analyzed:dict, rejected:dict):
+    
+    for x in analyzed:
+        data = analyzed[x]["llm_analysis"]
+        #print( f"data {data}")
+        followups = ", ".join(data["Follow-Ups"])
+        res = await update_applicant(status="Shortlisted",recordId=x, llm_score=data["Score"], llm_summary=data["Summary"], followups=followups)
+        if res == True:
+            print(f"record {x} updated successfully")
+        else:
+            print(f"record {x} not updated successfully")
+            
+    for x in rejected:
+        res = await update_applicant(status="Rejected", recordId=x)
+        if res == True:
+            print(f"record {x} updated successfully")
+        else:
+            print(f"record {x} not updated successfully")
+    
 
 
 async def main():
@@ -190,7 +255,7 @@ async def main():
     analyzed = await analyze(filtered)
     print(f"analyzed {analyzed}")
     
-    update(analyzed, rejected)
+    await update(analyzed, rejected)
     
     
 
