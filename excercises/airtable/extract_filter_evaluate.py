@@ -322,15 +322,17 @@ async def main():
     4. update - update the leads table with the results
     """
     extracted_data = extract()
-    # print(f"data {extracted_data}")
+    print(f"data extracted")
     
     filtered, rejected= filter(extracted_data)
     # print(f"filtered {filtered}")
+    print(f"applicants filtered based on criteria")
     
     analyzed = await analyze(filtered)
-    print(f"analyzed {analyzed}")
+    print(f"llm analysis completed ")
     
     await update(analyzed, rejected)
+    print(f"tables updated ")
     
     
 
