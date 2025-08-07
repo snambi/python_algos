@@ -213,8 +213,80 @@ async def update_applicant(status:str,
             
         return False
 
-async def update_leads():
-    pass
+def compare(v1:str, v2:str):
+    
+    sha1  = hashlib.sha256(v1.encode('utf-8')).hexdigest()
+    sha2  = hashlib.sha256(v2.encode('utf-8')).hexdigest()
+    
+    if sha1 == sha2 :
+        return True
+    else:
+        return False
+    
+async def upsert_leads(recordId:str, data:dict):
+    base_id = airtable_json_update.AIRTABLE_BASE_ID
+    headers = airtable_json_update.HEADERS
+
+    application_id = data["compressed"]["Application_ID"]
+
+    print(f"Upserting lead for Application_ID: {application_id}")
+
+    # Step 1: Search for existing lead by ApplicationId (properly quoted)
+    search_url = f"https://api.airtable.com/v0/{base_id}/Leads"
+    params = {
+        "filterByFormula": f"{{Applicants}} = {application_id}",
+        "maxRecords": 1
+    }
+
+    search_response = requests.get(search_url, headers=headers, params=params)
+    search_response.raise_for_status()
+    results = search_response.json()
+
+    if results.get("records"):
+        
+        # before updating check whether the data changed
+        fields = results["records"][0]["fields"]
+        v2 = json.dumps(data["compressed"], separators=(',', ':'))
+        isSame = compare(fields["Compressed_JSON"], v2 )
+        if isSame :
+            return True
+        
+        # Step 2: Lead exists — update it
+        lead_id = results["records"][0]["id"]
+        
+        update_url = f"https://api.airtable.com/v0/{base_id}/Leads/{lead_id}"
+
+        patch_payload = {
+            "fields": {
+                "Applicants": [recordId],  # if this is a linked field
+                "Compressed_JSON": json.dumps(data["compressed"], separators=(',', ':')),
+                "Score_Reason": data["score_reason"]
+            }
+        }
+
+        patch_response = requests.patch(update_url, headers=headers, json=patch_payload)
+        patch_response.raise_for_status()
+        print(f"Updated existing Lead: {lead_id}")
+        return patch_response.json()
+
+    else:
+        # Step 3: No existing record — create a new one
+        create_url = f"https://api.airtable.com/v0/{base_id}/Leads"
+
+        post_payload = {
+            "fields": {
+                "Applicants": [recordId],  # if this is a linked field
+                "Compressed_JSON": json.dumps(data["compressed"], separators=(',', ':')),
+                "Score_Reason": data["score_reason"]
+            }
+        }
+
+        post_response = requests.post(create_url, headers=headers, json=post_payload)
+        post_response.raise_for_status()
+        print("Created new Lead")
+        return post_response.json()
+
+
     
 
 async def update(analyzed:dict, rejected:dict):
@@ -235,6 +307,9 @@ async def update(analyzed:dict, rejected:dict):
             print(f"record {x} updated successfully")
         else:
             print(f"record {x} not updated successfully")
+            
+    for x in analyzed:
+        await upsert_leads(recordId=x, data=analyzed[x])
     
 
 
